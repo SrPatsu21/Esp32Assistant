@@ -1,10 +1,53 @@
 #include <Arduino.h>
 #include "esp_sleep.h"
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
-const int PIN_PIR    = 27;
+const int PIN_PIR = 27;
 const int PIN_BUTTON = 14;
-const int PIN_LED    = 26;
-const int PIN_LIGHT  = 34;
+const int PIN_LED = 26;
+const int PIN_LIGHT = 34;
+
+const char* ssid = "wifiname";
+const char* password = "wifipass";
+const byte targetMAC[6] =
+{
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA
+};
+WiFiUDP udp;
+
+void sendWOL(const byte* mac)
+{
+    byte packet[102];
+
+    // 6 bytes FF
+    for (int i = 0; i < 6; i++)
+    {
+        packet[i] = 0xFF;
+    }
+
+    // MAC repetido 16 vezes
+    for (int i = 1; i <= 16; i++)
+    {
+        memcpy(&packet[i * 6], mac, 6);
+    }
+
+    udp.beginPacket(
+        IPAddress(255,255,255,255),
+        9
+    );
+
+    udp.write(packet, sizeof(packet));
+
+    udp.endPacket();
+
+    Serial.println("Wake-on-LAN enviado");
+}
 
 enum SystemState
 {
@@ -16,7 +59,6 @@ SystemState state = ARMED;
 unsigned long lastMovement = 0;
 
 unsigned long ledTurnOffTime = 0;
-// const unsigned long OCCUPIED_TIMEOUT = 5000UL;
 const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
 bool lastButtonState = HIGH;
 int pass = 0;
@@ -42,7 +84,31 @@ void enterOccupied()
     Serial.println("Estado: OCCUPIED");
 
     // Wake-on-LAN
+    WiFi.begin(ssid, password);
 
+    Serial.print("Conectando WiFi");
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(250);
+        Serial.print(".");
+    }
+
+    Serial.println();
+    Serial.println("WiFi conectado");\
+    Serial.println(WiFi.localIP());
+
+    udp.begin(9);
+
+    sendWOL(&targetMAC[0]);
+
+    udp.stop();
+
+    WiFi.disconnect(true);
+
+    WiFi.mode(WIFI_OFF);
+
+    Serial.println("WiFi desligado");
 
     // LIGHT
     int lightLevel = analogRead(PIN_LIGHT);
