@@ -8,7 +8,6 @@ const int PIN_LIGHT  = 34;
 
 enum SystemState
 {
-    SLEEPING,
     ARMED,
     OCCUPIED
 };
@@ -20,42 +19,18 @@ unsigned long ledTurnOffTime = 0;
 // const unsigned long OCCUPIED_TIMEOUT = 5000UL;
 const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
 bool lastButtonState = HIGH;
+int pass = 0;
+
 
 void goToSleep()
 {
-    state = SLEEPING;
+    Serial.println("Entrando em deep sleep");
 
-    analogWrite(PIN_LED, 0);
-
-    Serial.println("Estado: SLEEPING");
-}
-
-void goToSleep()
-{
-    Serial.println("Light sleep");
-
-    digitalWrite(PIN_LED, LOW);
-
-    esp_sleep_enable_ext0_wakeup(
-        GPIO_NUM_14,
-        0
-    );
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_14, 0);
 
     delay(100);
 
-    esp_light_sleep_start();
-
-    Serial.println("Acordou");
-}
-
-
-void wakeSystem()
-{
-    state = ARMED;
-    analogWrite(PIN_LED, 255);
-    ledTurnOffTime = millis() + 100;
-
-    Serial.println("Estado: ARMED");
+    esp_deep_sleep_start();
 }
 
 void enterOccupied()
@@ -92,6 +67,8 @@ void setup()
 
     digitalWrite(PIN_LED, LOW);
 
+    delay(100);
+
     Serial.println("Sistema iniciado");
 }
 
@@ -104,30 +81,17 @@ void loop()
     // debounce
     if (lastButtonState == HIGH && buttonState == LOW)
     {
-        delay(20);
+        delay(100);
 
-        // sleep or wake
+        // sleep
         if (digitalRead(PIN_BUTTON) == LOW)
         {
-            if (state == SLEEPING)
-            {
-                wakeSystem();
-            }
-            else
-            {
-                goToSleep();
-            }
+            goToSleep();
         }
     }
 
     lastButtonState = buttonState;
 
-    // SLEEP
-    if (state == SLEEPING)
-    {
-        delay(200);
-        return;
-    }
 
     // PIR
     bool movement = digitalRead(PIN_PIR);
@@ -153,6 +117,8 @@ void loop()
             ledTurnOffTime += 100;
 
             Serial.println("Estado: ARMED");
+        } else {
+            delay(100);
         }
     }
 
@@ -163,5 +129,5 @@ void loop()
         ledTurnOffTime = time;
     }
 
-    delay(10);
+    delay(100);
 }
