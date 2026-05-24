@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "esp_sleep.h"
 
 const int PIN_PIR    = 27;
 const int PIN_BUTTON = 14;
@@ -14,22 +15,45 @@ enum SystemState
 SystemState state = ARMED;
 
 unsigned long lastMovement = 0;
-const unsigned long OCCUPIED_TIMEOUT = 500UL;
-// const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 1000UL; // 10 minutos
+
+unsigned long ledTurnOffTime = 0;
+// const unsigned long OCCUPIED_TIMEOUT = 5000UL;
+const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
 bool lastButtonState = HIGH;
 
 void goToSleep()
 {
     state = SLEEPING;
 
-    digitalWrite(PIN_LED, LOW);
+    analogWrite(PIN_LED, 0);
 
     Serial.println("Estado: SLEEPING");
 }
 
+void goToSleep()
+{
+    Serial.println("Light sleep");
+
+    digitalWrite(PIN_LED, LOW);
+
+    esp_sleep_enable_ext0_wakeup(
+        GPIO_NUM_14,
+        0
+    );
+
+    delay(100);
+
+    esp_light_sleep_start();
+
+    Serial.println("Acordou");
+}
+
+
 void wakeSystem()
 {
     state = ARMED;
+    analogWrite(PIN_LED, 255);
+    ledTurnOffTime = millis() + 100;
 
     Serial.println("Estado: ARMED");
 }
@@ -52,17 +76,9 @@ void enterOccupied()
     Serial.println(lightLevel);
     if (lightLevel < 1500)
     {
-        Serial.println("Quarto escuro");
-
-        analogWrite(PIN_LED, 200);
+        ledTurnOffTime += 10000;
+        analogWrite(PIN_LED, 230);
     }
-    else
-    {
-        Serial.println("Quarto claro");
-
-        analogWrite(PIN_LED, 0);
-    }
-
 }
 
 void setup()
@@ -114,7 +130,6 @@ void loop()
     }
 
     // PIR
-
     bool movement = digitalRead(PIN_PIR);
 
     if (movement)
@@ -128,32 +143,25 @@ void loop()
     }
 
     // TIMEOUT PRESENÇA
+    int time = millis();
     if (state == OCCUPIED)
     {
-        if (millis() - lastMovement > OCCUPIED_TIMEOUT)
+        if (time - lastMovement > OCCUPIED_TIMEOUT)
         {
             state = ARMED;
+            analogWrite(PIN_LED, 255);
+            ledTurnOffTime += 100;
 
             Serial.println("Estado: ARMED");
         }
     }
 
-    // ===== LED DEBUG =====
-
-    // switch (state)
-    // {
-    //     case SLEEPING:
-    //         digitalWrite(PIN_LED, LOW);
-    //         break;
-
-    //     case ARMED:
-    //         digitalWrite(PIN_LED, HIGH);
-    //         break;
-
-    //     case OCCUPIED:
-    //         digitalWrite(PIN_LED, (millis() / 500) % 2);
-    //         break;
-    // }
+    // Trun off LED
+    if (time > ledTurnOffTime)
+    {
+        analogWrite(PIN_LED, 0);
+        ledTurnOffTime = time;
+    }
 
     delay(10);
 }
