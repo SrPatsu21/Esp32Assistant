@@ -3,52 +3,13 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
+// PIN
 const int PIN_PIR = 27;
 const int PIN_BUTTON = 14;
 const int PIN_LED = 26;
 const int PIN_LIGHT = 34;
 
-const char* ssid = "wifiname";
-const char* password = "wifipass";
-const byte targetMAC[6] =
-{
-    0xAA,
-    0xAA,
-    0xAA,
-    0xAA,
-    0xAA,
-    0xAA
-};
-WiFiUDP udp;
-
-void sendWOL(const byte* mac)
-{
-    byte packet[102];
-
-    // 6 bytes FF
-    for (int i = 0; i < 6; i++)
-    {
-        packet[i] = 0xFF;
-    }
-
-    // MAC repetido 16 vezes
-    for (int i = 1; i <= 16; i++)
-    {
-        memcpy(&packet[i * 6], mac, 6);
-    }
-
-    udp.beginPacket(
-        IPAddress(255,255,255,255),
-        9
-    );
-
-    udp.write(packet, sizeof(packet));
-
-    udp.endPacket();
-
-    Serial.println("Wake-on-LAN enviado");
-}
-
+// State control
 enum SystemState
 {
     ARMED,
@@ -62,6 +23,20 @@ unsigned long ledTurnOffTime = 0;
 const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
 bool lastButtonState = HIGH;
 int pass = 0;
+
+// wifi
+const char* ssid = "wifiname";
+const char* password = "wifipass";
+const byte targetMAC[6] =
+{
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA,
+    0xAA
+};
+WiFiUDP udp;
 
 void connectWifi(){
     WiFi.begin(ssid, password);
@@ -93,6 +68,65 @@ void disconnectWifi(){
 
 }
 
+// wake on lan
+void sendWOL(const byte* mac)
+{
+    byte packet[102];
+
+    // 6 bytes FF
+    for (int i = 0; i < 6; i++)
+    {
+        packet[i] = 0xFF;
+    }
+
+    // MAC repetido 16 vezes
+    for (int i = 1; i <= 16; i++)
+    {
+        memcpy(&packet[i * 6], mac, 6);
+    }
+
+    udp.beginPacket(
+        IPAddress(255,255,255,255),
+        9
+    );
+
+    udp.write(packet, sizeof(packet));
+
+    udp.endPacket();
+
+    Serial.println("Wake-on-LAN enviado");
+}
+
+// log
+enum EventType
+{
+    EVENT_ENTER,
+    EVENT_TIMEOUT
+};
+struct EventLog
+{
+    EventType type;
+    unsigned long time;
+};
+const int MAX_LOGS = 50;
+EventLog logs[MAX_LOGS];
+int logIndex = 0;
+
+void addLog(EventType type)
+{
+    logs[logIndex].type = type;
+
+    logs[logIndex].time = millis();
+
+    logIndex++;
+
+    if (logIndex >= MAX_LOGS)
+    {
+        logIndex = 0;
+    }
+}
+
+// change state
 void goToSleep()
 {
     Serial.println("Entrando em deep sleep");
@@ -107,6 +141,7 @@ void goToSleep()
 void enterOccupied()
 {
     state = OCCUPIED;
+    addLog(EVENT_ENTER);
 
     lastMovement = millis();
 
@@ -128,6 +163,18 @@ void enterOccupied()
         analogWrite(PIN_LED, 230);
     }
 }
+
+void enterArmed()
+{
+    addLog(EVENT_TIMEOUT);
+    state = ARMED;
+    analogWrite(PIN_LED, 255);
+    ledTurnOffTime += 100;
+
+    Serial.println("Estado: ARMED");
+}
+
+// main
 
 void setup()
 {
@@ -185,11 +232,7 @@ void loop()
     {
         if (time - lastMovement > OCCUPIED_TIMEOUT)
         {
-            state = ARMED;
-            analogWrite(PIN_LED, 255);
-            ledTurnOffTime += 100;
-
-            Serial.println("Estado: ARMED");
+            enterArmed();
         } else {
             delay(100);
         }
