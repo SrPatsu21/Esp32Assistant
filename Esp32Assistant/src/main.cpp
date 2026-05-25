@@ -2,6 +2,7 @@
 #include "esp_sleep.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <WebServer.h>
 
 // PIN
 const int PIN_PIR = 27;
@@ -37,6 +38,7 @@ const byte targetMAC[6] =
     0xAA
 };
 WiFiUDP udp;
+WebServer server(80);
 
 void connectWifi(){
     WiFi.begin(ssid, password);
@@ -66,6 +68,158 @@ void disconnectWifi(){
 
     Serial.println("WiFi desligado");
 
+}
+
+// webserver
+const char webpage[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ESP32 Logs</title>
+<style>
+body{
+    font-family: Arial;
+    background:#111;
+    color:#eee;
+    padding:20px;
+}
+.card{
+    background:#222;
+    padding:15px;
+    margin-bottom:10px;
+    border-radius:10px;
+}
+</style>
+</head>
+<body>
+
+<h1>ESP32 Presence Logs</h1>
+
+<div id="status"></div>
+
+<div id="logs"></div>
+
+<script>
+
+async function loadLogs()
+{
+    const response = await fetch('/logs');
+
+    const data = await response.json();
+
+    const nowBrowser = Date.now();
+
+    const bootTime = nowBrowser - data.uptime;
+
+    document.getElementById('status').innerHTML =
+        '<div class="card">' +
+        'Estado: ' + data.state +
+        '<br>Uptime: ' +
+        Math.floor(data.uptime / 1000) +
+        's</div>';
+
+    let html = '';
+
+    for(const log of data.logs)
+    {
+        const realTime =
+            new Date(bootTime + log.time);
+
+        html +=
+            '<div class="card">' +
+            '<b>' + log.type + '</b><br>' +
+            realTime.toLocaleString() +
+            '</div>';
+    }
+
+    document.getElementById('logs').innerHTML =
+        html;
+}
+
+loadLogs();
+
+setInterval(loadLogs, 5000);
+
+</script>
+
+</body>
+</html>
+)rawliteral";
+
+void handleRoot()
+{
+    server.send(200, "text/html", webpage);
+}
+
+void handleLogs()
+{
+    String json = "{";
+
+    json += "\"uptime\":";
+    json += millis();
+
+    json += ",";
+
+    json += "\"state\":\"";
+
+    if(state == ARMED)
+    {
+        json += "ARMED";
+    }
+    else
+    {
+        json += "OCCUPIED";
+    }
+
+    json += "\",";
+
+    json += "\"logs\":[";
+
+    bool first = true;
+
+    for(int i = 0; i < MAX_LOGS; i++)
+    {
+        if(logs[i].time == 0)
+        {
+            continue;
+        }
+
+        if(!first)
+        {
+            json += ",";
+        }
+
+        first = false;
+
+        json += "{";
+
+        json += "\"type\":\"";
+
+        if(logs[i].type == EVENT_ENTER)
+        {
+            json += "ENTER";
+        }
+        else
+        {
+            json += "TIMEOUT";
+        }
+
+        json += "\",";
+
+        json += "\"time\":";
+        json += logs[i].time;
+
+        json += "}";
+    }
+
+    json += "]}";
+
+    server.send(
+        200,
+        "application/json",
+        json
+    );
 }
 
 // wake on lan
@@ -130,6 +284,7 @@ void addLog(EventType type)
 void goToSleep()
 {
     Serial.println("Entrando em deep sleep");
+    disconnectWifi();
 
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_14, 0);
 
@@ -148,9 +303,7 @@ void enterOccupied()
     Serial.println("Estado: OCCUPIED");
 
     // Wake-on-LAN
-    connectWifi();
     sendWOL(&targetMAC[0]);
-    disconnectWifi();
 
     // LIGHT
     int lightLevel = analogRead(PIN_LIGHT);
@@ -190,6 +343,17 @@ void setup()
     delay(100);
 
     Serial.println("Sistema iniciado");
+
+    connectWifi();
+
+    // server
+    server.on("/", handleRoot);
+
+    server.on("/logs", handleLogs);
+
+    server.begin();
+
+    Serial.println("HTTP server iniciado");
 }
 
 void loop()
@@ -244,6 +408,6 @@ void loop()
         analogWrite(PIN_LED, 0);
         ledTurnOffTime = time;
     }
-
+    server.handleClient();
     delay(100);
 }
