@@ -63,6 +63,35 @@ const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
 bool lastButtonState = HIGH;
 int pass = 0;
 
+void connectWifi(){
+    WiFi.begin(ssid, password);
+
+    Serial.print("Conectando WiFi");
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(250);
+        Serial.print(".");
+    }
+
+    Serial.println();
+    Serial.println("WiFi conectado");\
+    Serial.println(WiFi.localIP());
+
+    udp.begin(9);
+
+}
+
+void disconnectWifi(){
+    udp.stop();
+
+    WiFi.disconnect(true);
+
+    WiFi.mode(WIFI_OFF);
+
+    Serial.println("WiFi desligado");
+
+}
 
 void goToSleep()
 {
@@ -84,31 +113,9 @@ void enterOccupied()
     Serial.println("Estado: OCCUPIED");
 
     // Wake-on-LAN
-    WiFi.begin(ssid, password);
-
-    Serial.print("Conectando WiFi");
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(250);
-        Serial.print(".");
-    }
-
-    Serial.println();
-    Serial.println("WiFi conectado");\
-    Serial.println(WiFi.localIP());
-
-    udp.begin(9);
-
+    connectWifi();
     sendWOL(&targetMAC[0]);
-
-    udp.stop();
-
-    WiFi.disconnect(true);
-
-    WiFi.mode(WIFI_OFF);
-
-    Serial.println("WiFi desligado");
+    disconnectWifi();
 
     // LIGHT
     int lightLevel = analogRead(PIN_LIGHT);
