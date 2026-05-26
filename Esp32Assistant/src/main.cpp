@@ -21,7 +21,7 @@ SystemState state = ARMED;
 unsigned long lastMovement = 0;
 
 unsigned long ledTurnOffTime = 0;
-const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 100UL; // 10 minutos
+const unsigned long OCCUPIED_TIMEOUT = 10UL  * 60UL * 1000UL; // 10 minutos
 bool lastButtonState = HIGH;
 int pass = 0;
 
@@ -152,76 +152,6 @@ void handleRoot()
     server.send(200, "text/html", webpage);
 }
 
-void handleLogs()
-{
-    String json = "{";
-
-    json += "\"uptime\":";
-    json += millis();
-
-    json += ",";
-
-    json += "\"state\":\"";
-
-    if(state == ARMED)
-    {
-        json += "ARMED";
-    }
-    else
-    {
-        json += "OCCUPIED";
-    }
-
-    json += "\",";
-
-    json += "\"logs\":[";
-
-    bool first = true;
-
-    for(int i = 0; i < MAX_LOGS; i++)
-    {
-        if(logs[i].time == 0)
-        {
-            continue;
-        }
-
-        if(!first)
-        {
-            json += ",";
-        }
-
-        first = false;
-
-        json += "{";
-
-        json += "\"type\":\"";
-
-        if(logs[i].type == EVENT_ENTER)
-        {
-            json += "ENTER";
-        }
-        else
-        {
-            json += "TIMEOUT";
-        }
-
-        json += "\",";
-
-        json += "\"time\":";
-        json += logs[i].time;
-
-        json += "}";
-    }
-
-    json += "]}";
-
-    server.send(
-        200,
-        "application/json",
-        json
-    );
-}
-
 // wake on lan
 void sendWOL(const byte* mac)
 {
@@ -325,6 +255,76 @@ void enterArmed()
     ledTurnOffTime += 100;
 
     Serial.println("Estado: ARMED");
+}
+
+void handleLogs()
+{
+    String json = "{";
+
+    json += "\"uptime\":";
+    json += millis();
+
+    json += ",";
+
+    json += "\"state\":\"";
+
+    if(state == ARMED)
+    {
+        json += "ARMED";
+    }
+    else
+    {
+        json += "OCCUPIED";
+    }
+
+    json += "\",";
+
+    json += "\"logs\":[";
+
+    bool first = true;
+
+    for(int i = 0; i < MAX_LOGS; i++)
+    {
+        if(logs[i].time == 0)
+        {
+            continue;
+        }
+
+        if(!first)
+        {
+            json += ",";
+        }
+
+        first = false;
+
+        json += "{";
+
+        json += "\"type\":\"";
+
+        if(logs[i].type == EVENT_ENTER)
+        {
+            json += "ENTER";
+        }
+        else
+        {
+            json += "TIMEOUT";
+        }
+
+        json += "\",";
+
+        json += "\"time\":";
+        json += logs[i].time;
+
+        json += "}";
+    }
+
+    json += "]}";
+
+    server.send(
+        200,
+        "application/json",
+        json
+    );
 }
 
 // main
